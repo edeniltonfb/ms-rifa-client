@@ -1,0 +1,8 @@
+verificar configurações em:
+
+.env
+
+provavelmente não vai precisar alterar as configurações nos arquivos abaixo
+axios.js (código da empresa)
+ContactUs -> contatos da empresa
+Head/CustomHead -> nome da empresa

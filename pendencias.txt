@@ -1,0 +1,23 @@
+Fluxo de checkout:
+
+Cliente digita o telefone ou o sistema pega o telefone do cache;
+Sistema envia código através de menagem de whatsapp
+Sistema exibe formulário para entrada do código, com possibilidade de voltar ao estágio anterior;
+Cliente informa o código. Se estiver errado, o sistema exibe mensagem de erro. Se estiver certo, passa para o próximo formulário.
+Sistema verfica se já existe cadastro. Se existe, exibe o formulário preenchido. Se não existe, exibe o formulário em branco
+Sistema exibe formulário para entrada de e-mail, nome e nickname;
+CLiente preenche os campos
+Sistema atualiza os dados e conclui a reserva
+
+Quantos estágios?
+1- Inicial, para envio do whatsapp ou e-mail;
+2- VAlidação do código;
+3- Atualização do cadastro;
+4- Criação do cadastro;
+
+Diagrama de estados:
+
+1 -> 2
+2 -> 1, 3, 4
+3 -> 1
+4 -> 1

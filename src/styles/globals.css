@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+.content {
+  display: none;
+}
+
+.active-content {
+  display: flex;
+  flex-direction: column;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.row-footer {
+  display: flex;
+  height: 100%;
+  justify-content: space-between;
+  max-width: 200px;
+  min-width: 100px;
+}
+
+.multisorteios-link {
+  color: 009dff !important;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.buy-options {
+  color: #101412 !important;
+  font-size: 16px;
+
+  background-color: #c4cac7;
+  position: relative;
+}
+
+.buy-options-mais-popular {
+  color: #157347 !important;
+  font-size: 16px;
+  border-color: #157347;
+  background-color: #d5f1e4;
+  position: relative;
+}
+
+.buy-options-reset {
+  color: #801818 !important;
+  font-size: 16px;
+  border-color: #801818;
+  background-color: #e2b1b1;
+}
+
+.legend {
+  font-size: 10px;
+  background-color: #157347 !important;
+  color: #FFF !important;
+
+}
+
+.align-bottom {
+  bottom: 0;
+  align-items: end;
+}
+
+.ranking {
+  color: #fcfcfc !important;
+  font-size: 16px;
+  border-color: #000000;
+  background-color: #454949;
+  position: relative;
+  text-align: center;
+}
+
+.premiacao-ranking {
+  color: #fcfcfc !important;
+  font-size: 16px;
+  border-color: #232323;
+  background-color: #636363;
+  position: relative;
+  text-align: center;
+}
+
+.floating-button {
+  opacity: 0.8;
+}
+
+.space-between {
+  justify-content: space-between;
+}
+
+/* styles.css */
+@media (max-width: 450px) {
+  .custom-flex {
+    flex-direction: column;
+  }
+}
+
+@media (min-width: 451px) {
+  .custom-flex {
+    flex-direction: row;
+  }
+}
