@@ -25,7 +25,7 @@ export default function SelecionarSorteio() {
     const buscarDados = async () => {
         try {
             showLoader();
-            const resposta = await instance.get(`/listarsorteios?token=${user?.token}`);
+            const resposta = await instance.get(`/listarrifas?token=${user?.token}`);
             const apiResult: ApiResult = resposta.data;
 
             if (apiResult.success) {

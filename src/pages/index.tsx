@@ -37,39 +37,15 @@ export default function Home() {
                         Selecionar Sorteio
                     </ItemMenuButton>
 
-                    {profile === 'CAMBISTA' &&
-                        <ItemMenuButton onClick={() => router.push('/registrar_venda')}>
-                            <ShoppingCart size={28} />
-                            Registrar Venda
-                        </ItemMenuButton>
-                    }
-
-                    {profile === 'CAMBISTA' &&
-                        <ItemMenuButton onClick={() => router.push('/importacao')}>
-                            <FileSpreadsheet size={28} />
-                            Importação de Planilha
-                        </ItemMenuButton>
-                    }
-
-                    <ItemMenuButton onClick={() => router.push('/extrato_vendas')}>
-                        <Receipt size={28} />
-                        Extrato de Vendas
-                    </ItemMenuButton>
-
+                    
                     <ItemMenuButton onClick={() => router.push('/resultado')}>
                         <ListChecks size={28} />
                         Resultado
                     </ItemMenuButton>
 
-                    <ItemMenuButton onClick={() => router.push('/ganhadores')}>
-                        <Trophy size={28} />
-                        Ganhadores
-                    </ItemMenuButton>
+                    
 
-                    <ItemMenuButton onClick={() => router.push('/arquivos')}>
-                        <File size={28} />
-                        Arquivos
-                    </ItemMenuButton>
+                   
 
                     {profile === 'ADMIN' &&
                         <ItemMenuButton onClick={() => router.push('/rotas')}>
@@ -90,12 +66,7 @@ export default function Home() {
                         Alterar Senha
                     </ItemMenuButton>
 
-                    {profile === 'ADMIN' &&
-                        <ItemMenuButton onClick={() => router.push('/restaurar_senha')}>
-                            <LockKeyhole size={28} />
-                            Restaurar Senha
-                        </ItemMenuButton>
-                    }
+                    
 
                 </div>
 

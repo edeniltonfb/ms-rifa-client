@@ -6,7 +6,7 @@ export function CustomHead() {
   
     <Head>
         
-        <title>{process.env.NEXT_PUBLIC_EMPRESA_NOME}</title>
+        <title>Brasil Rifas</title>
         <link rel="shortcut icon" href="/favicon.ico" />
         
       </Head>

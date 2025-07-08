@@ -19,7 +19,7 @@ export function Navbar() {
         <div className="flex flex-1 items-center mx-5 max-w-[600px]">
           <Link href="/">
             <div className='absolute top-2 left-4'>
-              <p className='text-xl font-bold '>União +</p>
+              <p className='text-xl font-bold '>Brasil Rifas</p>
             </div>
           </Link>
           <div className="absolute top-2 right-4">
@@ -35,7 +35,7 @@ export function Navbar() {
           <div className='grid grid-cols-2 p-0 rounded-md'>
             <div className='p-2 border-r border-t border-gray-200'>
               <p className='text-sm font-medium truncate'>{sorteio?.dataSorteio}</p>
-              <p className='text-xs mt-1 truncate'>{sorteio?.titulo}</p>
+              <p className='text-xs mt-1 truncate'>{sorteio?.tipo}</p>
             </div>
             <div className='flex flex-col p-2 items-end border-t border-gray-200'>
               <p className='text-sm font-medium truncate'>{user?.name}</p>

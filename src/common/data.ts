@@ -12,7 +12,7 @@ export interface Sorteio {
     valorBilhete: number;
     titulo: string;
     tipo: string;
-    subtipo: string;
+    modalidade: string;
     horario: string;
     imageUrl: string;
 }

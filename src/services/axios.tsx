@@ -28,6 +28,6 @@ export const instance = axios.create({
       'empresaNome': process.env.NEXT_PUBLIC_EMPRESA_NOME,
     }
   },
-  baseURL: 'https://multisorteios.dev/msbolaoadmin/apiuniaomais'
-  //baseURL: 'http://localhost:8079/msbolaoadmin/apiuniaomais'
+  baseURL: 'https://multisorteios.dev/msrifaadmin/api'
+  //baseURL: 'http://localhost:8079/msrifaadmin/api'
 })

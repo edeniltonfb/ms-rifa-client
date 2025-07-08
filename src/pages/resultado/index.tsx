@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { ApiResult, Resultado } from '@common/data';
 import { instance } from 'src/services/axios';
 import { useAuth } from 'src/contexts/AuthContext';
-import { Button } from '@components/button';
 import { useAppContext } from 'src/contexts/AppContext';
 import { CustomHead } from '@components/Layout/Head';
 import { useRouter } from 'next/router';
@@ -264,9 +263,9 @@ export default function SelecionarSorteio() {
                         <div className="flex justify-between items-center">
                             <h1 className="text-2xl font-semibold">Resultados</h1>
                             {profile === 'ADMIN' && (
-                                <Button onClick={novoResultado} disabled={loading}>
+                                <button onClick={novoResultado} disabled={loading}>
                                     Novo Resultado
-                                </Button>
+                                </button>
                             )}
                         </div>
 

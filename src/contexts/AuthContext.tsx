@@ -35,11 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (login: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const response = await fetch('https://multisorteios.dev/msbolaoadmin/apiuniaomais/login', {
+      const response = await fetch('https://multisorteios.dev/msrifaadmin/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'empresaId': process.env.NEXT_PUBLIC_EMPRESA_ID!.toString()
         },
         body: JSON.stringify({ login, password }),
       });
@@ -84,12 +83,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const response = await fetch(
-        `https://multisorteios.dev/msbolaoadmin/apiuniaomais/validatetoken?token=${token}`,
+        `https://multisorteios.dev/msrifaadmin/api/validatetoken?token=${token}`,
         {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'empresaId': process.env.NEXT_PUBLIC_EMPRESA_ID!.toString()
           },
         }
       );
