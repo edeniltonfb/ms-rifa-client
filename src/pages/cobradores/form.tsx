@@ -26,6 +26,7 @@ import { Cobrador } from '../../types/Cobrador'; // Certifique-se de que Cobrado
 // Definir a interface para os dados do formulário
 // comissao e whatsapp podem ser tratados como string no form para input flexível
 interface CobradorFormData {
+    id: number;
     nome: string;
     login: string;
     ativo: boolean;
@@ -42,6 +43,7 @@ const CobradorForm: React.FC = () => {
 
     const [cobradorId, setCobradorId] = useState<number | null>(null); // Para armazenar o ID numérico
     const [formData, setFormData] = useState<CobradorFormData>({
+        id:Number(id),
         nome: '',
         login: '',
         ativo: true, // Padrão para novo cobrador
@@ -82,6 +84,7 @@ const CobradorForm: React.FC = () => {
                     if (result.success && result.data) {
                         const fetchedCobrador = result.data;
                         setFormData({
+                            id:Number(id),
                             nome: fetchedCobrador.nome,
                             login: fetchedCobrador.login,
                             ativo: fetchedCobrador.ativo,
@@ -144,16 +147,9 @@ const CobradorForm: React.FC = () => {
         };
 
         const isEditing = cobradorId !== null;
-        let url = '';
-        let method = '';
 
-        if (isEditing) {
-            url = `https://multisorteios.dev/msrifaadmin/api/atualizarCobrador?token=${user.token}&cobradorId=${cobradorId}`;
-            method = 'PUT'; // Ou POST, dependendo da sua API para update
-        } else {
-            url = `https://multisorteios.dev/msrifaadmin/api/criarCobrador?token=${user.token}`;
-            method = 'POST';
-        }
+        var url = `https://multisorteios.dev/msrifaadmin/api/cadastrarcobrador?token=${user.token}`;
+        var method = 'POST';
 
         try {
             const response = await fetch(url, {

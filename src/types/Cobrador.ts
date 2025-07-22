@@ -51,3 +51,8 @@ export interface CobradorApiResponse {
     errorMessage: string | null;
     data: PagedCobradorData | null; // Agora 'data' é do tipo PagedCobradorData
 }
+
+export interface CobradorLookup {
+    id: number;
+    label: string;
+}

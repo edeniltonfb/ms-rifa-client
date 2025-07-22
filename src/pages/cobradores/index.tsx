@@ -145,7 +145,7 @@ const CobradoresList: React.FC = () => {
 
     const fetchCobradores = useCallback(async () => {
         if (!user?.token) {
-            enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
+            //enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
             setIsLoading(false);
             return;
         }

@@ -1,13 +1,17 @@
+import { CobradorLookup } from "./Cobrador";
+
 // types/Vendedor.ts
 export interface Vendedor {
     id: number;
     nome: string;
     ativo: boolean;
     cobradorId: number;
+    cobradorNome: string | null;
     login: string;
     comissao: number | null;
     email: string | null;
     whatsapp: string | null;
+    cobrador?: CobradorLookup;
 }
 
 // NOVO: Interface para a estrutura 'pageable' dentro da resposta

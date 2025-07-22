@@ -13,7 +13,11 @@ import {
     Paper,
     Grid,
     IconButton,
-    InputAdornment
+    InputAdornment,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -21,44 +25,75 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { useRouter } from 'next/router';
 import { useSnackbar } from 'notistack';
 import { useAuth } from '../../context/AuthContext';
-import { Vendedor } from '../../types/Vendedor'; // Certifique-se de que Vendedor está definido aqui
+import { Vendedor } from '../../types/Vendedor';
+import { CobradorLookup } from '../../types/Cobrador';
 
-// Definir a interface para os dados do formulário
-// comissao e whatsapp podem ser tratados como string no form para input flexível
 interface VendedorFormData {
+    id: number | null;
     nome: string;
     login: string;
     ativo: boolean;
-    comissao: string; // Permitir string para input, converter para number ao enviar
+    comissao: string;
     email: string;
     whatsapp: string;
+    cobradorId: number | null;
 }
 
 const VendedorForm: React.FC = () => {
     const router = useRouter();
-    const { id } = router.query; // Obtém o ID do vendedor da URL
+    const { id } = router.query;
     const { user } = useAuth();
     const { enqueueSnackbar } = useSnackbar();
 
-    const [vendedorId, setVendedorId] = useState<number | null>(null); // Para armazenar o ID numérico
+    const [vendedorId, setVendedorId] = useState<number | null>(null);
     const [formData, setFormData] = useState<VendedorFormData>({
+        id: null,
         nome: '',
         login: '',
-        ativo: true, // Padrão para novo vendedor
+        ativo: true,
         comissao: '',
         email: '',
         whatsapp: '',
+        cobradorId: null,
     });
-    const [isLoading, setIsLoading] = useState(true); // Indica se está carregando dados do vendedor existente
-    const [isSaving, setIsSaving] = useState(false); // Indica se o formulário está sendo salvo
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [cobradores, setCobradores] = useState<CobradorLookup[]>([]);
+    const [isCobradoresLoading, setIsCobradoresLoading] = useState(true);
 
-    // Effect para carregar os dados do vendedor se um ID for fornecido (modo edição)
     useEffect(() => {
+        const fetchCobradores = async () => {
+            if (!user?.token) {
+                enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
+                setIsCobradoresLoading(false);
+                return;
+            }
+
+            try {
+                const url = `https://multisorteios.dev/msrifaadmin/api/listarcobradoridlabel?token=${user.token}`;
+                const response = await fetch(url);
+                const result: { success: boolean; errorMessage?: string; data?: CobradorLookup[] } = await response.json();
+
+                if (result.success && result.data) {
+                    setCobradores(result.data);
+                } else {
+                    enqueueSnackbar(result.errorMessage || 'Erro ao carregar lista de cobradores.', { variant: 'error' });
+                }
+            } catch (error) {
+                console.error('Erro ao buscar cobradores:', error);
+                enqueueSnackbar('Não foi possível conectar ao servidor para buscar cobradores.', { variant: 'error' });
+            } finally {
+                setIsCobradoresLoading(false);
+            }
+        };
+
+        fetchCobradores();
+
         if (id) {
             const vendedorIdNum = Number(id);
             if (isNaN(vendedorIdNum)) {
                 enqueueSnackbar('ID de vendedor inválido.', { variant: 'error' });
-                router.push('/vendedores'); // Redireciona se o ID for inválido
+                router.push('/vendedores');
                 return;
             }
             setVendedorId(vendedorIdNum);
@@ -72,31 +107,30 @@ const VendedorForm: React.FC = () => {
 
                 setIsLoading(true);
                 try {
-                    // *** AQUI ESTÁ O AJUSTE PRINCIPAL ***
                     const url = `https://multisorteios.dev/msrifaadmin/api/buscarvendedor?token=${user.token}&id=${vendedorIdNum}`;
                     const response = await fetch(url);
-                    // O tipo da resposta deve ser ajustado para o que o endpoint 'buscarvendedor' retorna
-                    // Assumimos { success: boolean; errorMessage?: string; data?: Vendedor }
                     const result: { success: boolean; errorMessage?: string; data?: Vendedor } = await response.json();
 
                     if (result.success && result.data) {
                         const fetchedVendedor = result.data;
                         setFormData({
+                            id: fetchedVendedor.id,
                             nome: fetchedVendedor.nome,
                             login: fetchedVendedor.login,
                             ativo: fetchedVendedor.ativo,
                             comissao: fetchedVendedor.comissao !== null ? fetchedVendedor.comissao.toString() : '',
                             email: fetchedVendedor.email || '',
                             whatsapp: fetchedVendedor.whatsapp || '',
+                            cobradorId: fetchedVendedor.cobradorId || null,
                         });
                     } else {
                         enqueueSnackbar(result.errorMessage || 'Vendedor não encontrado ou erro ao carregar.', { variant: 'error' });
-                        router.push('/vendedores'); // Redireciona se não encontrar ou houver erro
+                        router.push('/vendedores');
                     }
                 } catch (error) {
                     console.error('Erro ao buscar vendedor por ID:', error);
                     enqueueSnackbar('Não foi possível conectar ao servidor para buscar vendedor.', { variant: 'error' });
-                    router.push('/vendedores'); // Redireciona em caso de erro de conexão
+                    router.push('/vendedores');
                 } finally {
                     setIsLoading(false);
                 }
@@ -104,24 +138,42 @@ const VendedorForm: React.FC = () => {
 
             fetchVendedorById();
         } else {
-            // Se não há ID na URL, é um novo vendedor, então não precisa carregar e já está pronto
             setIsLoading(false);
             setVendedorId(null);
+            setFormData(prev => ({ ...prev, id: null }));
         }
-    }, [id, user?.token, enqueueSnackbar, router]); // Dependências do useEffect
+    }, [id, user?.token, enqueueSnackbar, router]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value, type, checked } = e.target;
+    const handleCobradorChange = (event: any) => {
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value,
+            cobradorId: event.target.value as number,
         }));
     };
+
+    // --- CORREÇÃO NESTA FUNÇÃO ---
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target; // Destructure name and value directly
+        let fieldValue: string | boolean;
+
+        // Conditionally determine the field value based on the input type
+        if (e.target.type === 'checkbox') {
+            fieldValue = (e.target as HTMLInputElement).checked; // Only access 'checked' if it's a checkbox
+        } else {
+            fieldValue = value;
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            [name]: fieldValue,
+        }));
+    };
+    // --- FIM DA CORREÇÃO ---
 
     const handleClearField = (fieldName: keyof VendedorFormData) => {
         setFormData(prev => ({
             ...prev,
-            [fieldName]: fieldName === 'ativo' ? false : '', // Define valor padrão para ativo
+            [fieldName]: fieldName === 'ativo' ? false : (fieldName === 'cobradorId' ? null : ''),
         }));
     };
 
@@ -135,25 +187,25 @@ const VendedorForm: React.FC = () => {
             return;
         }
 
-        // Preparar os dados para envio
         const dataToSend = {
-            ...formData,
+            id: formData.id,
+            nome: formData.nome,
+            login: formData.login,
+            ativo: formData.ativo,
             comissao: formData.comissao !== '' ? parseFloat(formData.comissao) : null,
-            // Certifique-se de que o WhatsApp seja enviado apenas com dígitos se o backend esperar isso
             whatsapp: formData.whatsapp.replace(/\D/g, ''),
+            email: formData.email,
+            cobradorId: formData.cobradorId,
         };
 
         const isEditing = vendedorId !== null;
         let url = '';
         let method = '';
 
-        if (isEditing) {
-            url = `https://multisorteios.dev/msrifaadmin/api/cadastrarvendedor?token=${user.token}`;
-            method = 'PUT'; // Ou POST, dependendo da sua API para update
-        } else {
+        
             url = `https://multisorteios.dev/msrifaadmin/api/cadastrarvendedor?token=${user.token}`;
             method = 'POST';
-        }
+        
 
         try {
             const response = await fetch(url, {
@@ -168,7 +220,7 @@ const VendedorForm: React.FC = () => {
 
             if (result.success) {
                 enqueueSnackbar(`Vendedor ${isEditing ? 'atualizado' : 'criado'} com sucesso!`, { variant: 'success' });
-                router.push('/vendedores'); // Redirecionar para a lista após sucesso
+                router.push('/vendedores');
             } else {
                 enqueueSnackbar(result.errorMessage || `Erro ao ${isEditing ? 'atualizar' : 'criar'} vendedor.`, { variant: 'error' });
             }
@@ -180,7 +232,7 @@ const VendedorForm: React.FC = () => {
         }
     };
 
-    if (isLoading) {
+    if (isLoading || isCobradoresLoading) {
         return (
             <Layout>
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -253,7 +305,7 @@ const VendedorForm: React.FC = () => {
                                 control={
                                     <Switch
                                         checked={formData.ativo}
-                                        onChange={handleChange}
+                                        onChange={handleChange} // Este onChange agora está corrigido
                                         name="ativo"
                                         color="primary"
                                     />
@@ -307,7 +359,6 @@ const VendedorForm: React.FC = () => {
                                 name="whatsapp"
                                 value={formData.whatsapp}
                                 onChange={handleChange}
-                                // Adapte a máscara de telefone se necessário
                                 InputProps={{
                                     endAdornment: formData.whatsapp && (
                                         <InputAdornment position="end">
@@ -318,6 +369,29 @@ const VendedorForm: React.FC = () => {
                                     ),
                                 }}
                             />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControl fullWidth>
+                                <InputLabel id="cobrador-select-label">Cobrador</InputLabel>
+                                <Select
+                                    labelId="cobrador-select-label"
+                                    id="cobrador-select"
+                                    name="cobradorId"
+                                    value={formData.cobradorId || ''}
+                                    label="Cobrador"
+                                    onChange={handleCobradorChange}
+                                    disabled={isCobradoresLoading}
+                                >
+                                    <MenuItem value="">
+                                        <em>Nenhum</em>
+                                    </MenuItem>
+                                    {cobradores.map((cobrador) => (
+                                        <MenuItem key={cobrador.id} value={cobrador.id}>
+                                            {cobrador.label}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
                         </Grid>
                     </Grid>
                     <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>

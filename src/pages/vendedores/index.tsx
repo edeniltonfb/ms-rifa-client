@@ -1,137 +1,224 @@
-// src/pages/vendedores/index.tsx (COM ESTRUTURA DE RESPOSTA DO BACKEND AJUSTADA)
+// src/pages/vendedores/index.tsx
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '../../components/layout/Layout';
 import {
     Box,
     Typography,
-    Button,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
+    TablePagination,
     TableRow,
     Paper,
-    CircularProgress as MuiCircularProgress,
     IconButton,
+    CircularProgress as MuiCircularProgress,
+    TextField,
+    Button,
     Dialog,
     DialogActions,
     DialogContent,
     DialogContentText,
     DialogTitle,
     Switch,
-    TableSortLabel,
-    TextField,
     InputAdornment,
     FormControl,
+    InputLabel,
     Select,
     MenuItem,
-    SelectChangeEvent,
-    useTheme,
-    TablePagination,
+    TableSortLabel,
 } from '@mui/material';
+import { useTheme } from '@mui/material';
+import { visuallyHidden } from '@mui/utils';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
 import { useRouter } from 'next/router';
 import { useSnackbar } from 'notistack';
 import { useAuth } from '../../context/AuthContext';
-import { Vendedor, VendedorApiResponse } from '@/types/Vendedor';
-// Certifique-se de que VendedorApiResponse em types/Vendedor.ts foi atualizado!
-
-// Definir tipos para ordenação
-type Order = 'asc' | 'desc';
-type HeadCellId = keyof Vendedor | 'actions';
+import { Vendedor } from '../../types/Vendedor';
+import { CobradorLookup } from '../../types/Cobrador';
 
 interface HeadCell {
-    id: HeadCellId;
+    id: keyof Vendedor | 'actions';
     label: string;
     numeric: boolean;
     sortable: boolean;
+    filterable: boolean;
     align?: 'left' | 'center' | 'right';
-    filterable?: boolean;
-    filterType?: 'text' | 'boolean' | 'number';
-    width?: number;
+    filterType?: 'text' | 'boolean' | 'number' | 'select';
+    options?: CobradorLookup[];
 }
 
-const headCells: HeadCell[] = [
-    { id: 'id', label: 'ID', numeric: true, sortable: true, filterable: false },
-    { id: 'nome', label: 'Nome', numeric: false, sortable: true, filterable: true, filterType: 'text' },
-    { id: 'login', label: 'Login', numeric: false, sortable: true, filterable: true, filterType: 'text' },
-    { id: 'ativo', label: 'Ativo', numeric: false, sortable: true, align: 'center', filterable: true, filterType: 'boolean' },
-    { id: 'comissao', label: 'Comissão', numeric: true, sortable: true, filterable: true, filterType: 'number' },
-    { id: 'email', label: 'Email', numeric: false, sortable: true, filterable: true, filterType: 'text' },
-    { id: 'whatsapp', label: 'WhatsApp', numeric: false, sortable: true, filterable: true, filterType: 'text' },
-    { id: 'actions', label: 'Ações', numeric: false, sortable: false, filterable: false, align: 'right', width: 100 },
-];
+type Order = 'asc' | 'desc';
+
+interface PaginatedResponseData {
+    content: Vendedor[];
+    totalElements: number;
+}
+
+interface ApiResponse {
+    success: boolean;
+    errorMessage: string | null;
+    data: PaginatedResponseData;
+}
+
 
 const VendedoresList: React.FC = () => {
-    const { user } = useAuth();
     const router = useRouter();
+    const { user } = useAuth();
     const { enqueueSnackbar } = useSnackbar();
     const theme = useTheme();
 
+    const [order, setOrder] = useState<Order>('asc');
+    const [orderBy, setOrderBy] = useState<keyof Vendedor>('nome');
+    const [page, setPage] = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(10);
     const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+    const [totalRows, setTotalRows] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
-    const [vendedorToDelete, setVendedorToDelete] = useState<number | null>(null);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [vendedorToDeleteId, setVendedorToDeleteId] = useState<number | null>(null);
 
-    // Estados de paginação
-    const [page, setPage] = useState(0); // Página atual (0-indexed para Material-UI e Spring Boot Page)
-    const [rowsPerPage, setRowsPerPage] = useState(10); // Itens por página
-    const [totalItems, setTotalItems] = useState(0); // Total de itens do backend
-
-    // Estados de ordenação
-    const [order, setOrder] = useState<Order>('asc');
-    const [orderBy, setOrderBy] = useState<keyof Vendedor>('id');
-
-    // Estados de filtro
     const [filters, setFilters] = useState({
         nome: '',
         login: '',
-        ativo: 'all',
+        ativo: '', // Valor padrão vazio significa "Todos"
         comissao: '',
         email: '',
         whatsapp: '',
+        cobradorId: ''
     });
+
+    const [cobradoresParaFiltro, setCobradoresParaFiltro] = useState<CobradorLookup[]>([]);
+    const [isCobradoresLoading, setIsCobradoresLoading] = useState(true);
+
+    const headCells: HeadCell[] = useMemo(() => [
+        { id: 'id', label: 'ID', numeric: true, sortable: true, filterable: false, align: 'right' },
+        { id: 'nome', label: 'Nome', numeric: false, sortable: true, filterable: true, filterType: 'text' },
+        { id: 'login', label: 'Login', numeric: false, sortable: true, filterable: true, filterType: 'text' },
+        { id: 'ativo', label: 'Ativo', numeric: false, sortable: true, filterable: true, filterType: 'boolean', align: 'center' },
+        { id: 'comissao', label: 'Comissão', numeric: true, sortable: true, filterable: true, filterType: 'number' },
+        { id: 'email', label: 'Email', numeric: false, sortable: true, filterable: true, filterType: 'text' },
+        { id: 'whatsapp', label: 'WhatsApp', numeric: false, sortable: true, filterable: true, filterType: 'text' },
+        { id: 'cobradorNome', label: 'Cobrador', numeric: false, sortable: true, filterable: true, filterType: 'select', options: cobradoresParaFiltro },
+        { id: 'actions', label: 'Ações', numeric: false, sortable: false, filterable: false, align: 'right' },
+    ], [cobradoresParaFiltro]);
+
+    const fetchVendedores = useCallback(async () => {
+        if (!user?.token) {
+            setIsLoading(false);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            // Construção dinâmica dos parâmetros de filtro
+            const params: { [key: string]: string } = {
+                token: user.token,
+                page: page.toString(),
+                size: rowsPerPage.toString(),
+                // Use 'sort' para o campo de ordenação, como esperado pelo Spring Data JPA
+                orderBy: orderBy,
+                order:order,
+            };
+
+            // Adiciona filtros apenas se tiverem um valor significativo
+            for (const key in filters) {
+                const value = filters[key as keyof typeof filters];
+                // Se o valor não é vazio (para texto/número) e não é 'all' para o ativo
+                if (value !== '' && (key !== 'ativo' || (key === 'ativo' && value !== 'all'))) {
+                    params[key] = value;
+                }
+            }
+            
+            const queryParams = new URLSearchParams(params).toString();
+            const url = `https://multisorteios.dev/msrifaadmin/api/listarvendedor?${queryParams}`;
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.errorMessage || 'Erro ao carregar vendedores.');
+            }
+
+            const result: ApiResponse = await response.json();
+
+            if (result.success && result.data) {
+                if (Array.isArray(result.data.content)) {
+                    setVendedores(result.data.content);
+                    setTotalRows(result.data.totalElements);
+                } else {
+                    console.error("API 'listarvendedor' retornou 'content' que não é um array:", result.data.content);
+                    enqueueSnackbar('Formato de dados de vendedores inválido. Contate o suporte.', { variant: 'error' });
+                    setVendedores([]);
+                    setTotalRows(0);
+                }
+            } else {
+                enqueueSnackbar(result.errorMessage || 'Erro ao carregar vendedores.', { variant: 'error' });
+                setVendedores([]);
+                setTotalRows(0);
+            }
+        } catch (error: any) {
+            console.error('Erro ao buscar vendedores:', error);
+            enqueueSnackbar(error.message || 'Não foi possível conectar ao servidor para buscar vendedores.', { variant: 'error' });
+            setVendedores([]);
+            setTotalRows(0);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [page, rowsPerPage, orderBy, order, filters, user?.token, enqueueSnackbar]);
+
+    const fetchCobradoresParaFiltro = useCallback(async () => {
+        if (!user?.token) {
+            setIsCobradoresLoading(false);
+            return;
+        }
+
+        try {
+            const url = `https://multisorteios.dev/msrifaadmin/api/listarcobradoridlabel?token=${user.token}`;
+            const response = await fetch(url);
+            const result: { success: boolean; errorMessage?: string; data?: CobradorLookup[] } = await response.json();
+
+            if (result.success && result.data) {
+                if (Array.isArray(result.data)) {
+                    setCobradoresParaFiltro(result.data);
+                } else {
+                    console.error("API 'listarcobradoridlabel' retornou dados que não são um array:", result.data);
+                    enqueueSnackbar('Formato de dados de cobradores inválido para filtro. Contate o suporte.', { variant: 'error' });
+                    setCobradoresParaFiltro([]);
+                }
+            } else {
+                enqueueSnackbar(result.errorMessage || 'Erro ao carregar lista de cobradores para filtro.', { variant: 'error' });
+                setCobradoresParaFiltro([]);
+            }
+        } catch (error) {
+            console.error('Erro ao buscar cobradores para filtro:', error);
+            enqueueSnackbar('Não foi possível conectar ao servidor para buscar cobradores para filtro.', { variant: 'error' });
+            setCobradoresParaFiltro([]);
+        } finally {
+            setIsCobradoresLoading(false);
+        }
+    }, [user?.token, enqueueSnackbar]);
+
+    useEffect(() => {
+        fetchVendedores();
+    }, [fetchVendedores]);
+
+    useEffect(() => {
+        fetchCobradoresParaFiltro();
+    }, [fetchCobradoresParaFiltro]);
+
 
     const handleRequestSort = (property: keyof Vendedor) => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
         setOrderBy(property);
-        setPage(0); // Ao ordenar, volte para a primeira página
-    };
-
-    const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement> | { target: { name?: string; value: unknown } }) => {
-        const { name, value } = event.target;
-        setFilters(prev => ({
-            ...prev,
-            [name as string]: value,
-        }));
-        setPage(0); // Ao filtrar, volte para a primeira página
-    };
-
-    const handleClearFilter = (filterName: keyof typeof filters) => {
-        setFilters(prev => ({
-            ...prev,
-            [filterName]: filterName === 'ativo' ? 'all' : '',
-        }));
-        setPage(0); // Ao limpar um filtro, volte para a primeira página
-    };
-
-    const handleClearAllFilters = () => {
-        setFilters({
-            nome: '',
-            login: '',
-            ativo: 'all',
-            comissao: '',
-            email: '',
-            whatsapp: '',
-        });
-        setPage(0); // Ao limpar todos os filtros, volte para a primeira página
     };
 
     const handleChangePage = (event: unknown, newPage: number) => {
@@ -140,101 +227,73 @@ const VendedoresList: React.FC = () => {
 
     const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
         setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0); // Volte para a primeira página ao mudar o número de itens por página
+        setPage(0);
     };
 
-    const fetchVendedores = useCallback(async () => {
-        if (!user?.token) {
-            enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
-            setIsLoading(false);
-            return;
-        }
+    const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement> | { target: { name?: string; value: unknown } }) => {
+        const { name, value } = event.target;
+        setFilters(prev => ({
+            ...prev,
+            [name as string]: value,
+        }));
+        setPage(0);
+    };
 
-        setIsLoading(true);
-        try {
-            const params = new URLSearchParams();
-            params.append('token', user.token);
-            params.append('page', page.toString());
-            params.append('size', rowsPerPage.toString());
-            params.append('orderBy', orderBy as string);
-            params.append('order', order);
+    const handleClearFilter = (filterName: keyof typeof filters) => {
+        setFilters(prev => ({
+            ...prev,
+            [filterName]: '',
+        }));
+        setPage(0);
+    };
 
-            if (filters.nome) params.append('nome', filters.nome);
-            if (filters.login) params.append('login', filters.login);
-            if (filters.ativo !== 'all') params.append('ativo', filters.ativo);
-            if (filters.comissao) params.append('comissao', filters.comissao);
-            if (filters.email) params.append('email', filters.email);
-            if (filters.whatsapp) params.append('whatsapp', filters.whatsapp.replace(/\D/g, ''));
+      const handleClearAllFilters = () => {
+        setFilters({
+            nome: '',
+            login: '',
+            ativo: '', // Mantenha como string vazia para indicar "Todos"
+            comissao: '',
+            email: '',
+            whatsapp: '',
+            cobradorId:'',
+        });
+        setPage(0);
+    };
 
-            const url = `https://multisorteios.dev/msrifaadmin/api/listarvendedor?${params.toString()}`;
-            const response = await fetch(url);
-            const result: VendedorApiResponse = await response.json();
+    const handleAddVendedor = () => {
+        router.push('/vendedores/form');
+    };
 
-            if (result.success && result.data) { // Verifique se result.data existe e tem a estrutura esperada
-                // AJUSTE AQUI: Acessando as propriedades conforme a estrutura do seu backend
-                setVendedores(result.data.content);
-                setTotalItems(result.data.totalElements);
-                // O Material-UI TablePagination usa 'page' 0-indexed, que corresponde a 'number' do Spring Page
-                setPage(result.data.number);
-                // O Material-UI TablePagination usa 'rowsPerPage', que corresponde a 'size' do Spring Page
-                setRowsPerPage(result.data.size);
-
-            } else {
-                enqueueSnackbar(result.errorMessage || 'Erro ao carregar vendedores.', { variant: 'error' });
-                setVendedores([]);
-                setTotalItems(0);
-            }
-        } catch (error) {
-            console.error('Erro ao buscar vendedores:', error);
-            enqueueSnackbar('Não foi possível conectar ao servidor para listar vendedores.', { variant: 'error' });
-            setVendedores([]);
-            setTotalItems(0);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [user?.token, enqueueSnackbar, page, rowsPerPage, orderBy, order, filters]);
-
-    useEffect(() => {
-        fetchVendedores();
-    }, [fetchVendedores]);
-
-    const handleEdit = (id: number) => {
+    const handleEditVendedor = (id: number) => {
         router.push(`/vendedores/form?id=${id}`);
     };
 
     const handleDeleteClick = (id: number) => {
-        setVendedorToDelete(id);
-        setOpenConfirmDialog(true);
+        setVendedorToDeleteId(id);
+        setDeleteConfirmOpen(true);
     };
 
-    const handleCloseConfirmDialog = () => {
-        setOpenConfirmDialog(false);
-        setVendedorToDelete(null);
+    const handleCloseDeleteConfirm = () => {
+        setDeleteConfirmOpen(false);
+        setVendedorToDeleteId(null);
     };
 
     const handleConfirmDelete = async () => {
-        if (vendedorToDelete === null || !user?.token) {
+        if (!vendedorToDeleteId || !user?.token) {
+            enqueueSnackbar('ID do vendedor não especificado ou token de autenticação ausente.', { variant: 'error' });
             return;
         }
 
         setIsDeleting(true);
         try {
-            const url = `https://multisorteios.dev/msrifaadmin/api/excluirvendedor?token=${user.token}&vendedorId=${vendedorToDelete}`;
-            const response = await fetch(url, { method: 'GET' });
-            const result: VendedorApiResponse = await response.json();
+            const url = `https://multisorteios.dev/msrifaadmin/api/deletarvendedor?token=${user.token}&id=${vendedorToDeleteId}`;
+            const response = await fetch(url, { method: 'DELETE' });
+            const result: { success: boolean; errorMessage?: string } = await response.json();
 
             if (result.success) {
                 enqueueSnackbar('Vendedor excluído com sucesso!', { variant: 'success' });
-                // Após a exclusão, force um re-fetch para atualizar a lista e a paginação
-                // Ajuste a página se o último item da página foi excluído
-                // A lógica de setPage(newTotalPages - 1) é importante para evitar páginas vazias
-                const newTotalItems = totalItems - 1;
-                const newTotalPages = Math.ceil(newTotalItems / rowsPerPage);
-                if (page >= newTotalPages && page > 0) {
-                    setPage(newTotalPages - 1);
-                } else {
-                    fetchVendedores();
-                }
+                fetchVendedores();
+                handleCloseDeleteConfirm();
             } else {
                 enqueueSnackbar(result.errorMessage || 'Erro ao excluir vendedor.', { variant: 'error' });
             }
@@ -243,12 +302,7 @@ const VendedoresList: React.FC = () => {
             enqueueSnackbar('Não foi possível conectar ao servidor para excluir vendedor.', { variant: 'error' });
         } finally {
             setIsDeleting(false);
-            handleCloseConfirmDialog();
         }
-    };
-
-    const handleNewVendedor = () => {
-        router.push('/vendedores/form');
     };
 
     return (
@@ -259,7 +313,7 @@ const VendedoresList: React.FC = () => {
                     flexDirection: { xs: 'column', sm: 'row' },
                     justifyContent: 'space-between',
                     alignItems: { xs: 'flex-start', sm: 'center' },
-                    gap: 2, // espaçamento entre título e botões
+                    gap: 2,
                     mb: 3,
                 }}
             >
@@ -286,21 +340,21 @@ const VendedoresList: React.FC = () => {
                     <Button
                         variant="contained"
                         startIcon={<AddIcon />}
-                        onClick={handleNewVendedor}
+                        onClick={handleAddVendedor}
                     >
                         Novo Vendedor
                     </Button>
                 </Box>
             </Box>
 
-            {isLoading ? (
+            {(isLoading || isCobradoresLoading) && vendedores.length === 0 ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
                     <MuiCircularProgress />
                 </Box>
             ) : (
                 <Paper>
                     <TableContainer sx={{ overflowX: 'auto' }}>
-                        <Table sx={{ width: '100%', tableLayout: 'auto' }} aria-label="tabela de vendedores">
+                        <Table sx={{ minWidth: 650 }} aria-label="tabela de vendedores">
                             <TableHead>
                                 <TableRow sx={{ backgroundColor: theme.palette.primary.dark }}>
                                     {headCells.map((headCell) => (
@@ -310,17 +364,17 @@ const VendedoresList: React.FC = () => {
                                             padding="normal"
                                             sortDirection={orderBy === headCell.id ? order : false}
                                             sx={{
-                                                width: headCell.width || 'auto',
                                                 [theme.breakpoints.down('sm')]: {
-                                                    fontSize: '1.5rem', // Ajuste conforme necessário
+                                                    fontSize: '1.5rem',
                                                 },
                                                 color: theme.palette.common.white,
-                                                ...(headCell.id === 'comissao' || headCell.id === 'email' || headCell.id === 'whatsapp' ? {
+                                                ...(headCell.id === 'comissao' || headCell.id === 'email' || headCell.id === 'whatsapp' || headCell.id === 'cobradorNome'? {
                                                     [theme.breakpoints.down('sm')]: {
-                                                        display: 'none', // Oculta a célula em telas menores que 'sm'
+                                                        display: 'none',
                                                     },
                                                 } : {}),
-
+                                                
+                                                
                                             }}
                                         >
                                             {headCell.sortable ? (
@@ -347,121 +401,109 @@ const VendedoresList: React.FC = () => {
                                         </TableCell>
                                     ))}
                                 </TableRow>
-                                {/* LINHA DOS FILTROS */}
-                                <TableRow sx={{ backgroundColor: theme.palette.grey[100] }}>
-                                    {headCells.map((headCell) => (
-                                        <TableCell key={`filter-${headCell.id}`}
-                                            sx={{
-                                                width: headCell.width || 'auto',
-                                                [theme.breakpoints.down('sm')]: {
-                                                    fontSize: '1.5rem', // Ajuste conforme necessário
-                                                },
-                                                color: theme.palette.common.white,
-                                                ...(headCell.id === 'comissao' || headCell.id === 'email' || headCell.id === 'whatsapp' ? {
-                                                    [theme.breakpoints.down('sm')]: {
-                                                        display: 'none', // Oculta a célula em telas menores que 'sm'
+                               
+                                    <TableRow sx={{ backgroundColor: theme.palette.grey[100] }}>
+                                        {headCells.map((headCell) => (
+                                            <TableCell
+                                                key={`filter-${headCell.id}`}
+                                                sx={{
+                                                     [theme.breakpoints.down('sm')]: {
+                                                        fontSize: '1.1rem',
                                                     },
-                                                } : {}),
-
-                                            }}>
-                                            {headCell.filterable && headCell.filterType === 'text' && (
-                                                <TextField
-                                                    variant="standard"
-                                                    size="small"
-                                                    placeholder={headCell.label}
-                                                    name={headCell.id as string}
-                                                    value={filters[headCell.id as keyof typeof filters]}
-                                                    onChange={handleFilterChange}
-                                                    fullWidth
-                                                    InputProps={{
-                                                        endAdornment: filters[headCell.id as keyof typeof filters] && (
-                                                            <InputAdornment position="end">
-                                                                <IconButton
-                                                                    onClick={() => handleClearFilter(headCell.id as keyof typeof filters)}
-                                                                    size="small"
-                                                                >
-                                                                    <ClearIcon fontSize="small" />
-                                                                </IconButton>
-                                                            </InputAdornment>
-                                                        ),
-                                                        style: { fontSize: '0.85rem' }
-                                                    }}
-                                                    sx={{
-                                                        '& .MuiInputBase-input': { paddingTop: '8px', paddingBottom: '8px' },
-                                                        '& .MuiInputBase-root:before': { borderBottomColor: theme.palette.grey[400] },
-                                                        '& .MuiInputBase-root:hover:not(.Mui-disabled):before': { borderBottomColor: theme.palette.primary.main },
-                                                        '& .MuiInputBase-root:after': { borderBottomColor: theme.palette.primary.main },
-                                                        [theme.breakpoints.down('sm')]: {
-                                                            fontSize: '1.1rem', // Ajuste conforme necessário
-                                                        },
-
-
-                                                    }}
-                                                />
-                                            )}
-
-                                            {headCell.filterable && headCell.filterType === 'boolean' && (
-                                                <FormControl fullWidth size="small" variant="standard">
-                                                    <Select
-                                                        name={headCell.id as string}
-                                                        value={filters.ativo}
-                                                        onChange={handleFilterChange as (event: SelectChangeEvent<string>, child: React.ReactNode) => void}
-                                                        displayEmpty
-                                                        inputProps={{ 'aria-label': headCell.label }}
-                                                        sx={{
-                                                            fontSize: '1.1rem',
-                                                            '& .MuiInputBase-input': { paddingTop: '8px', paddingBottom: '8px' },
-                                                            '& .MuiInputBase-root:before': { borderBottomColor: theme.palette.grey[400] },
-                                                            '& .MuiInputBase-root:hover:not(.Mui-disabled):before': { borderBottomColor: theme.palette.primary.main },
-                                                            '& .MuiInputBase-root:after': { borderBottomColor: theme.palette.primary.main },
-                                                        }}
-
-                                                    >
-                                                        <MenuItem value="all">Todos</MenuItem>
-                                                        <MenuItem value="true">Ativos</MenuItem>
-                                                        <MenuItem value="false">Inativos</MenuItem>
-                                                    </Select>
-                                                </FormControl>
-                                            )}
-                                            {headCell.filterable && headCell.filterType === 'number' && (
-                                                <TextField
-                                                    variant="standard"
-                                                    size="small"
-                                                    placeholder={headCell.label}
-                                                    name={headCell.id as string}
-                                                    value={filters[headCell.id as keyof typeof filters]}
-                                                    onChange={handleFilterChange}
-                                                    fullWidth
-                                                    InputProps={{
-                                                        endAdornment: filters[headCell.id as keyof typeof filters] && (
-                                                            <InputAdornment position="end">
-                                                                <IconButton
-                                                                    onClick={() => handleClearFilter(headCell.id as keyof typeof filters)}
-                                                                    size="small"
-                                                                >
-                                                                    <ClearIcon fontSize="small" />
-                                                                </IconButton>
-                                                            </InputAdornment>
-                                                        ),
-                                                        style: { fontSize: '1.1rem' }
-                                                    }}
-                                                    sx={{
-                                                        '& .MuiInputBase-input': { paddingTop: '8px', paddingBottom: '8px' },
-                                                        '& .MuiInputBase-root:before': { borderBottomColor: theme.palette.grey[400] },
-                                                        '& .MuiInputBase-root:hover:not(.Mui-disabled):before': { borderBottomColor: theme.palette.primary.main },
-                                                        '& .MuiInputBase-root:after': { borderBottomColor: theme.palette.primary.main },
-
+                                                    ...(headCell.id === 'comissao' || headCell.id === 'email' || headCell.id === 'whatsapp' || headCell.id === 'cobradorNome' ? {
                                                         [theme.breakpoints.down('sm')]: {
                                                             display: 'none',
                                                         },
-
-                                                    }}
-
-                                                />
-                                            )}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
+                                                    } : {}),
+                                                }}
+                                            >
+                                                {headCell.filterable && (
+                                                    <>
+                                                        {headCell.filterType === 'text' && (
+                                                            <TextField
+                                                                fullWidth
+                                                                variant="standard"
+                                                                placeholder={`Filtrar ${headCell.label}`}
+                                                                name={headCell.id as string}
+                                                                value={filters[headCell.id as keyof typeof filters]}
+                                                                onChange={handleFilterChange}
+                                                                InputProps={{
+                                                                    endAdornment: filters[headCell.id as keyof typeof filters] && (
+                                                                        <InputAdornment position="end">
+                                                                            <IconButton onClick={() => handleClearFilter(headCell.id as keyof typeof filters)} size="small">
+                                                                                <ClearIcon fontSize="small" />
+                                                                            </IconButton>
+                                                                        </InputAdornment>
+                                                                    ),
+                                                                }}
+                                                                sx={{ mb: 1 }}
+                                                            />
+                                                        )}
+                                                        {headCell.filterType === 'boolean' && (
+                                                            <FormControl fullWidth variant="standard" sx={{ mb: 1 }}>
+                                                                <InputLabel>Status</InputLabel>
+                                                                <Select
+                                                                    name={headCell.id as string}
+                                                                    value={filters[headCell.id as keyof typeof filters]}
+                                                                    onChange={handleFilterChange}
+                                                                    label="Status"
+                                                                >
+                                                                    <MenuItem value="">
+                                                                        <em>Todos</em>
+                                                                    </MenuItem>
+                                                                    <MenuItem value="true">Ativo</MenuItem>
+                                                                    <MenuItem value="false">Inativo</MenuItem>
+                                                                </Select>
+                                                            </FormControl>
+                                                        )}
+                                                        {headCell.filterType === 'number' && (
+                                                            <TextField
+                                                                fullWidth
+                                                                variant="standard"
+                                                                placeholder={`Filtrar ${headCell.label}`}
+                                                                name={headCell.id as string}
+                                                                value={filters[headCell.id as keyof typeof filters]}
+                                                                onChange={handleFilterChange}
+                                                                type="number"
+                                                                InputProps={{
+                                                                    endAdornment: filters[headCell.id as keyof typeof filters] && (
+                                                                        <InputAdornment position="end">
+                                                                            <IconButton onClick={() => handleClearFilter(headCell.id as keyof typeof filters)} size="small">
+                                                                                <ClearIcon fontSize="small" />
+                                                                            </IconButton>
+                                                                        </InputAdornment>
+                                                                    ),
+                                                                }}
+                                                                sx={{ mb: 1 }}
+                                                            />
+                                                        )}
+                                                        {headCell.filterType === 'select' && headCell.id === 'cobradorNome' && (
+                                                            <FormControl fullWidth variant="standard" sx={{ mb: 1 }}>
+                                                                <InputLabel>Cobrador</InputLabel>
+                                                                <Select
+                                                                    name="cobradorId"
+                                                                    value={filters.cobradorId}
+                                                                    onChange={handleFilterChange}
+                                                                    label="Cobrador"
+                                                                    disabled={isCobradoresLoading}
+                                                                >
+                                                                    <MenuItem value="">
+                                                                        <em>Todos</em>
+                                                                    </MenuItem>
+                                                                    {cobradoresParaFiltro.map((cobrador) => (
+                                                                        <MenuItem key={cobrador.id} value={cobrador.id}>
+                                                                            {cobrador.label}
+                                                                        </MenuItem>
+                                                                    ))}
+                                                                </Select>
+                                                            </FormControl>
+                                                        )}
+                                                        {headCell.id === 'actions' && <Box sx={{ minWidth: '40px' }}></Box>}
+                                                    </>
+                                                )}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
                             </TableHead>
                             <TableBody>
                                 {vendedores.length === 0 && !isLoading ? (
@@ -471,63 +513,74 @@ const VendedoresList: React.FC = () => {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    vendedores.map((vendedor) => (
+                                    Array.isArray(vendedores) && vendedores.map((vendedor) => (
                                         <TableRow
                                             key={vendedor.id}
                                             sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                                         >
-                                            <TableCell component="th" scope="row" sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    fontSize: '1.5rem',
-                                                },
-                                            }}>
+                                            <TableCell
+                                                component="th"
+                                                scope="row"
+                                                align="right"
+                                                sx={{ [theme.breakpoints.down('sm')]: { fontSize: '0.85rem' } }}
+                                            >
                                                 {vendedor.id}
                                             </TableCell>
-                                            <TableCell sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    fontSize: '1.5rem',
-                                                },
-                                            }}>{vendedor.nome}</TableCell>
-                                            <TableCell sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    fontSize: '1.5rem',
-                                                },
-                                            }}>{vendedor.login}</TableCell>
-                                            <TableCell align="center" sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    fontSize: '1.5rem',
-                                                },
-                                            }}>
+                                            <TableCell sx={{ [theme.breakpoints.down('sm')]: { fontSize: '0.85rem' } }}>
+                                                {vendedor.nome}
+                                            </TableCell>
+                                            <TableCell sx={{ [theme.breakpoints.down('sm')]: { fontSize: '0.85rem' } }}>
+                                                {vendedor.login}
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ [theme.breakpoints.down('sm')]: { fontSize: '0.85rem' } }}>
                                                 <Switch
                                                     checked={vendedor.ativo}
                                                     disabled
                                                     inputProps={{ 'aria-label': 'status ativo do vendedor' }}
                                                 />
                                             </TableCell>
-                                            <TableCell sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    display: 'none', // Oculta a célula em telas menores que 'sm'
-                                                },
-                                            }}>{vendedor.comissao !== null ? `${vendedor.comissao}%` : ''}</TableCell>
-                                            <TableCell sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    display: 'none', // Oculta a célula em telas menores que 'sm'
-                                                },
-                                            }}>{vendedor.email || ''}</TableCell>
-                                            <TableCell sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    display: 'none', // Oculta a célula em telas menores que 'sm'
-                                                },
-                                            }}>{vendedor.whatsapp || ''}</TableCell>
-                                            <TableCell align="right" sx={{
-                                                [theme.breakpoints.down('sm')]: {
-                                                    paddingLeft: '4px',
-                                                    paddingRight: '4px',
-                                                },
-                                            }}>
+                                            <TableCell
+                                                sx={{
+                                                    [theme.breakpoints.down('sm')]: { display: 'none' },
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {vendedor.comissao !== null ? `${vendedor.comissao}%` : ''}
+                                            </TableCell>
+                                            <TableCell
+                                                sx={{
+                                                    [theme.breakpoints.down('sm')]: { display: 'none' },
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {vendedor.email || ''}
+                                            </TableCell>
+                                            <TableCell
+                                                sx={{
+                                                    [theme.breakpoints.down('sm')]: { display: 'none' },
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {vendedor.whatsapp || ''}
+                                            </TableCell>
+                                            <TableCell
+                                                sx={{
+                                                    [theme.breakpoints.down('sm')]: { display: 'none' },
+                                                    fontSize: '0.85rem'
+                                                }}
+                                            >
+                                                {vendedor.cobradorNome || ''}
+                                            </TableCell>
+                                            <TableCell
+                                                align="right"
+                                                sx={{
+                                                    [theme.breakpoints.down('sm')]: { paddingLeft: '4px', paddingRight: '4px' },
+                                                    width: '1%', whiteSpace: 'nowrap'
+                                                }}
+                                            >
                                                 <IconButton
                                                     aria-label="editar"
-                                                    onClick={() => handleEdit(vendedor.id)}
+                                                    onClick={() => handleEditVendedor(vendedor.id)}
                                                 >
                                                     <EditIcon />
                                                 </IconButton>
@@ -547,14 +600,14 @@ const VendedoresList: React.FC = () => {
                         </Table>
                     </TableContainer>
                     <TablePagination
-                        rowsPerPageOptions={[5, 10, 25, 50]}
+                        rowsPerPageOptions={[5, 10, 25]}
                         component="div"
-                        count={totalItems}
+                        count={totalRows}
                         rowsPerPage={rowsPerPage}
                         page={page}
                         onPageChange={handleChangePage}
                         onRowsPerPageChange={handleChangeRowsPerPage}
-                        labelRowsPerPage="Itens por página:"
+                        labelRowsPerPage="Linhas por página:"
                         labelDisplayedRows={({ from, to, count }) =>
                             `${from}-${to} de ${count !== -1 ? count : `mais de ${to}`}`
                         }
@@ -563,19 +616,19 @@ const VendedoresList: React.FC = () => {
             )}
 
             <Dialog
-                open={openConfirmDialog}
-                onClose={handleCloseConfirmDialog}
-                aria-labelledby="confirm-dialog-title"
-                aria-describedby="confirm-dialog-description"
+                open={deleteConfirmOpen}
+                onClose={handleCloseDeleteConfirm}
+                aria-labelledby="alert-dialog-title"
+                aria-describedby="alert-dialog-description"
             >
-                <DialogTitle id="confirm-dialog-title">Confirmar Exclusão</DialogTitle>
+                <DialogTitle id="alert-dialog-title">{"Confirmar Exclusão"}</DialogTitle>
                 <DialogContent>
-                    <DialogContentText id="confirm-dialog-description">
-                        Tem certeza de que deseja excluir este vendedor? Esta ação não pode ser desfeita.
+                    <DialogContentText id="alert-dialog-description">
+                        Tem certeza que deseja excluir este vendedor? Esta ação não pode ser desfeita.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseConfirmDialog} disabled={isDeleting}>Cancelar</Button>
+                    <Button onClick={handleCloseDeleteConfirm} disabled={isDeleting}>Cancelar</Button>
                     <Button onClick={handleConfirmDelete} color="error" autoFocus disabled={isDeleting}>
                         {isDeleting ? <MuiCircularProgress size={24} /> : 'Excluir'}
                     </Button>
