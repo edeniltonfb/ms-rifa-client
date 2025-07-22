@@ -2,10 +2,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { AppBar, Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography } from '@mui/material';
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, Typography } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CategoryIcon from '@mui/icons-material/Category';
+import PeopleIcon from '@mui/icons-material/People'; 
 
 interface NavItem {
   name: string;
@@ -16,7 +17,9 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: <DashboardIcon /> },
   { name: 'Itens', href: '/items', icon: <CategoryIcon /> },
-  { name: 'Configurações', href: '/settings', icon: <SettingsIcon /> },
+  { name: 'Cobradores', href: '/cobradores', icon: <PeopleIcon /> },
+  { name: 'Vendedores', href: '/vendedores', icon: <PeopleIcon /> },
+   { name: 'Configurações', href: '/settings', icon: <SettingsIcon /> },
 ];
 
 interface SidebarProps {

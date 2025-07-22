@@ -1,4 +1,4 @@
-// src/pages/cobradores/form.tsx
+// src/pages/cobradores/form/index.tsx
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../../components/layout/Layout';
@@ -7,309 +7,327 @@ import {
     Typography,
     TextField,
     Button,
-    Paper,
-    FormControlLabel,
-    Switch,
     CircularProgress as MuiCircularProgress,
+    Switch,
+    FormControlLabel,
+    Paper,
+    Grid,
+    IconButton,
+    InputAdornment
 } from '@mui/material';
+import SaveIcon from '@mui/icons-material/Save';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ClearIcon from '@mui/icons-material/Clear';
 import { useRouter } from 'next/router';
 import { useSnackbar } from 'notistack';
 import { useAuth } from '../../context/AuthContext';
-import { Cobrador, CobradorApiResponse } from '../../types/Cobrador';
+import { Cobrador } from '../../types/Cobrador'; // Certifique-se de que Cobrador está definido aqui
+
+// Definir a interface para os dados do formulário
+// comissao e whatsapp podem ser tratados como string no form para input flexível
+interface CobradorFormData {
+    nome: string;
+    login: string;
+    ativo: boolean;
+    comissao: string; // Permitir string para input, converter para number ao enviar
+    email: string;
+    whatsapp: string;
+}
 
 const CobradorForm: React.FC = () => {
     const router = useRouter();
-    const { id } = router.query; // Pega o ID da URL se estiver em modo de edição
+    const { id } = router.query; // Obtém o ID do cobrador da URL
     const { user } = useAuth();
     const { enqueueSnackbar } = useSnackbar();
 
-    const [cobrador, setCobrador] = useState<Cobrador>({
-        id: 0, // Será 0 para novos, ou o ID existente para edição
+    const [cobradorId, setCobradorId] = useState<number | null>(null); // Para armazenar o ID numérico
+    const [formData, setFormData] = useState<CobradorFormData>({
         nome: '',
-        ativo: true,
         login: '',
-        comissao: null,
+        ativo: true, // Padrão para novo cobrador
+        comissao: '',
         email: '',
         whatsapp: '',
     });
-    const [isLoading, setIsLoading] = useState(false); // Para carregar dados de edição
-    const [isSubmitting, setIsSubmitting] = useState(false); // Para submeter o formulário
+    const [isLoading, setIsLoading] = useState(true); // Indica se está carregando dados do cobrador existente
+    const [isSaving, setIsSaving] = useState(false); // Indica se o formulário está sendo salvo
 
-    // Estados para controle de erros de validação
-    const [errors, setErrors] = useState({
-        nome: '',
-        login: '',
-        comissao: '',
-    });
-
-    const isEditMode = !!id; // Verdadeiro se um ID for passado na URL
-
-    // Função para buscar os dados do cobrador para edição
-    const fetchCobrador = useCallback(async (cobradorId: number) => {
-        if (!user?.token) {
-            enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
-            return;
-        }
-
-        setIsLoading(true);
-        try {
-            const url = `https://multisorteios.dev/msrifaadmin/api/listarcobrador?token=${user.token}`;
-            const response = await fetch(url);
-            const result: CobradorApiResponse = await response.json();
-
-            if (result.success && Array.isArray(result.data)) {
-                const foundCobrador = (result.data as Cobrador[]).find(c => c.id === cobradorId);
-                if (foundCobrador) {
-                    setCobrador(foundCobrador);
-                } else {
-                    enqueueSnackbar('Cobrador não encontrado.', { variant: 'error' });
-                    router.push('/cobradores'); // Volta para a lista se não encontrar
-                }
-            } else {
-                enqueueSnackbar(result.errorMessage || 'Erro ao carregar dados do cobrador.', { variant: 'error' });
-                router.push('/cobradores');
-            }
-        } catch (error) {
-            console.error('Erro ao buscar cobrador:', error);
-            enqueueSnackbar('Não foi possível conectar ao servidor para carregar o cobrador.', { variant: 'error' });
-            router.push('/cobradores');
-        } finally {
-            setIsLoading(false);
-        }
-    }, [user?.token, enqueueSnackbar, router]);
-
+    // Effect para carregar os dados do cobrador se um ID for fornecido (modo edição)
     useEffect(() => {
-        if (isEditMode && id && typeof id === 'string') {
-            fetchCobrador(parseInt(id, 10));
-        } else if (!isEditMode) {
-            // Limpa o formulário se estiver em modo de criação
-            setCobrador({
-                id: 0,
-                nome: '',
-                ativo: true,
-                login: '',
-                comissao: null,
-                email: '',
-                whatsapp: '',
-            });
+        if (id) {
+            const cobradorIdNum = Number(id);
+            if (isNaN(cobradorIdNum)) {
+                enqueueSnackbar('ID de cobrador inválido.', { variant: 'error' });
+                router.push('/cobradores'); // Redireciona se o ID for inválido
+                return;
+            }
+            setCobradorId(cobradorIdNum);
+
+            const fetchCobradorById = async () => {
+                if (!user?.token) {
+                    enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
+                    setIsLoading(false);
+                    return;
+                }
+
+                setIsLoading(true);
+                try {
+                    // *** AQUI ESTÁ O AJUSTE PRINCIPAL ***
+                    const url = `https://multisorteios.dev/msrifaadmin/api/buscarcobrador?token=${user.token}&id=${cobradorIdNum}`;
+                    const response = await fetch(url);
+                    // O tipo da resposta deve ser ajustado para o que o endpoint 'buscarcobrador' retorna
+                    // Assumimos { success: boolean; errorMessage?: string; data?: Cobrador }
+                    const result: { success: boolean; errorMessage?: string; data?: Cobrador } = await response.json();
+
+                    if (result.success && result.data) {
+                        const fetchedCobrador = result.data;
+                        setFormData({
+                            nome: fetchedCobrador.nome,
+                            login: fetchedCobrador.login,
+                            ativo: fetchedCobrador.ativo,
+                            comissao: fetchedCobrador.comissao !== null ? fetchedCobrador.comissao.toString() : '',
+                            email: fetchedCobrador.email || '',
+                            whatsapp: fetchedCobrador.whatsapp || '',
+                        });
+                    } else {
+                        enqueueSnackbar(result.errorMessage || 'Cobrador não encontrado ou erro ao carregar.', { variant: 'error' });
+                        router.push('/cobradores'); // Redireciona se não encontrar ou houver erro
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar cobrador por ID:', error);
+                    enqueueSnackbar('Não foi possível conectar ao servidor para buscar cobrador.', { variant: 'error' });
+                    router.push('/cobradores'); // Redireciona em caso de erro de conexão
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            fetchCobradorById();
+        } else {
+            // Se não há ID na URL, é um novo cobrador, então não precisa carregar e já está pronto
+            setIsLoading(false);
+            setCobradorId(null);
         }
-    }, [isEditMode, id, fetchCobrador]);
+    }, [id, user?.token, enqueueSnackbar, router]); // Dependências do useEffect
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
-        setCobrador(prev => ({
+        setFormData(prev => ({
             ...prev,
             [name]: type === 'checkbox' ? checked : value,
         }));
-        // Limpa o erro ao digitar
-        setErrors(prev => ({ ...prev, [name]: '' }));
     };
 
-    const handleComissaoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let value = e.target.value;
-        // Permite vazio para o campo se a API aceitar null
-        if (value === '') {
-            setCobrador(prev => ({ ...prev, comissao: null }));
-        } else {
-            const numValue = parseInt(value, 10);
-            if (!isNaN(numValue)) {
-                setCobrador(prev => ({ ...prev, comissao: numValue }));
-            } else {
-                // Se não for um número válido, ainda assim atualiza o estado para permitir backspace etc.
-                setCobrador(prev => ({ ...prev, comissao: value as any })); // Temporariamente para permitir visualização
-            }
-        }
-        setErrors(prev => ({ ...prev, comissao: '' }));
+    const handleClearField = (fieldName: keyof CobradorFormData) => {
+        setFormData(prev => ({
+            ...prev,
+            [fieldName]: fieldName === 'ativo' ? false : '', // Define valor padrão para ativo
+        }));
     };
-
-    const validateForm = () => {
-        let isValid = true;
-        let newErrors = { nome: '', login: '', comissao: '' };
-
-        if (!cobrador.nome.trim()) {
-            newErrors.nome = 'O nome é obrigatório.';
-            isValid = false;
-        }
-        if (!cobrador.login.trim()) {
-            newErrors.login = 'O login é obrigatório.';
-            isValid = false;
-        }
-        // Validação da comissão
-        if (cobrador.comissao !== null) {
-            const comissaoNum = Number(cobrador.comissao); // Usa Number para lidar com string se ainda não convertido
-            if (isNaN(comissaoNum) || comissaoNum < 0 || comissaoNum > 40) {
-                newErrors.comissao = 'A comissão deve ser um número entre 0 e 40.';
-                isValid = false;
-            }
-        }
-
-        setErrors(newErrors);
-        return isValid;
-    };
-
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!validateForm()) {
-            enqueueSnackbar('Por favor, corrija os erros no formulário.', { variant: 'warning' });
-            return;
-        }
+        setIsSaving(true);
 
         if (!user?.token) {
             enqueueSnackbar('Token de autenticação não disponível. Faça login novamente.', { variant: 'error' });
+            setIsSaving(false);
             return;
         }
 
-        setIsSubmitting(true);
-
-        // Prepara o payload
-        const payload: Partial<Cobrador> = {
-            nome: cobrador.nome,
-            ativo: cobrador.ativo,
-            login: cobrador.login,
-            comissao: cobrador.comissao,
-            email: cobrador.email,
-            whatsapp: cobrador.whatsapp,
+        // Preparar os dados para envio
+        const dataToSend = {
+            ...formData,
+            comissao: formData.comissao !== '' ? parseFloat(formData.comissao) : null,
+            // Certifique-se de que o WhatsApp seja enviado apenas com dígitos se o backend esperar isso
+            whatsapp: formData.whatsapp.replace(/\D/g, ''),
         };
 
-        // Adiciona o ID ao payload se estiver em modo de edição
-        if (isEditMode && typeof id === 'string') {
-            payload.id = parseInt(id, 10);
+        const isEditing = cobradorId !== null;
+        let url = '';
+        let method = '';
+
+        if (isEditing) {
+            url = `https://multisorteios.dev/msrifaadmin/api/atualizarCobrador?token=${user.token}&cobradorId=${cobradorId}`;
+            method = 'PUT'; // Ou POST, dependendo da sua API para update
+        } else {
+            url = `https://multisorteios.dev/msrifaadmin/api/criarCobrador?token=${user.token}`;
+            method = 'POST';
         }
 
         try {
-            const url = `https://multisorteios.dev/msrifaadmin/api/cadastrarcobrador?token=${user.token}`;
             const response = await fetch(url, {
-                method: 'POST',
+                method: method,
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(dataToSend),
             });
 
-            const result: CobradorApiResponse = await response.json();
+            const result: { success: boolean; errorMessage?: string; data?: Cobrador } = await response.json();
 
             if (result.success) {
-                enqueueSnackbar(`Cobrador ${isEditMode ? 'atualizado' : 'cadastrado'} com sucesso!`, { variant: 'success' });
-                router.push('/cobradores'); // Redireciona de volta para a lista
+                enqueueSnackbar(`Cobrador ${isEditing ? 'atualizado' : 'criado'} com sucesso!`, { variant: 'success' });
+                router.push('/cobradores'); // Redirecionar para a lista após sucesso
             } else {
-                enqueueSnackbar(result.errorMessage || `Erro ao ${isEditMode ? 'atualizar' : 'cadastrar'} cobrador.`, { variant: 'error' });
+                enqueueSnackbar(result.errorMessage || `Erro ao ${isEditing ? 'atualizar' : 'criar'} cobrador.`, { variant: 'error' });
             }
         } catch (error) {
-            console.error(`Erro ao ${isEditMode ? 'atualizar' : 'cadastrar'} cobrador:`, error);
-            enqueueSnackbar(`Não foi possível conectar ao servidor para ${isEditMode ? 'atualizar' : 'cadastrar'} cobrador.`, { variant: 'error' });
+            console.error(`Erro ao ${isEditing ? 'enviar atualização' : 'criar'} cobrador:`, error);
+            enqueueSnackbar('Não foi possível conectar ao servidor.', { variant: 'error' });
         } finally {
-            setIsSubmitting(false);
+            setIsSaving(false);
         }
     };
 
-    if (isLoading && isEditMode) {
+    if (isLoading) {
         return (
             <Layout>
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
                     <MuiCircularProgress />
-                    <Typography ml={2}>Carregando dados do cobrador...</Typography>
                 </Box>
             </Layout>
         );
     }
 
+    const title = cobradorId ? 'Editar Cobrador' : 'Novo Cobrador';
+
     return (
         <Layout>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" component="h1">
-                    {isEditMode ? 'Editar Cobrador' : 'Novo Cobrador'}
+                    {title}
                 </Typography>
                 <Button
                     variant="outlined"
+                    startIcon={<ArrowBackIcon />}
                     onClick={() => router.push('/cobradores')}
-                    disabled={isSubmitting}
                 >
-                    Voltar para a Lista
+                    Voltar
                 </Button>
             </Box>
 
-            <Paper sx={{ p: 4, mt: 3 }}>
+            <Paper sx={{ p: 4 }}>
                 <form onSubmit={handleSubmit}>
-                    <TextField
-                        fullWidth
-                        label="Nome"
-                        name="nome"
-                        value={cobrador.nome}
-                        onChange={handleChange}
-                        margin="normal"
-                        required
-                        error={!!errors.nome}
-                        helperText={errors.nome}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Login"
-                        name="login"
-                        value={cobrador.login}
-                        onChange={handleChange}
-                        margin="normal"
-                        required
-                        error={!!errors.login}
-                        helperText={errors.login}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Comissão (%)"
-                        name="comissao"
-                        type="number"
-                        value={cobrador.comissao === null ? '' : cobrador.comissao} // Exibe vazio se for null
-                        onChange={handleComissaoChange}
-                        margin="normal"
-                        inputProps={{ min: 0, max: 40 }}
-                        error={!!errors.comissao}
-                        helperText={errors.comissao || 'Valor entre 0 e 40.'}
-                    />
-                    <TextField
-                        fullWidth
-                        label="Email"
-                        name="email"
-                        value={cobrador.email}
-                        onChange={handleChange}
-                        margin="normal"
-                        type="email"
-                    />
-                    <TextField
-                        fullWidth
-                        label="WhatsApp"
-                        name="whatsapp"
-                        value={cobrador.whatsapp}
-                        onChange={handleChange}
-                        margin="normal"
-                    />
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={cobrador.ativo}
+                    <Grid container spacing={3}>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="Nome"
+                                name="nome"
+                                value={formData.nome}
                                 onChange={handleChange}
-                                name="ativo"
-                                color="primary"
+                                required
+                                InputProps={{
+                                    endAdornment: formData.nome && (
+                                        <InputAdornment position="end">
+                                            <IconButton onClick={() => handleClearField('nome')} size="small">
+                                                <ClearIcon fontSize="small" />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
                             />
-                        }
-                        label="Ativo"
-                        sx={{ mt: 2 }}
-                    />
-                    <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="Login"
+                                name="login"
+                                value={formData.login}
+                                onChange={handleChange}
+                                required
+                                InputProps={{
+                                    endAdornment: formData.login && (
+                                        <InputAdornment position="end">
+                                            <IconButton onClick={() => handleClearField('login')} size="small">
+                                                <ClearIcon fontSize="small" />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={formData.ativo}
+                                        onChange={handleChange}
+                                        name="ativo"
+                                        color="primary"
+                                    />
+                                }
+                                label="Ativo"
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="Comissão (%)"
+                                name="comissao"
+                                value={formData.comissao}
+                                onChange={handleChange}
+                                type="number"
+                                inputProps={{ step: "0.01" }}
+                                InputProps={{
+                                    endAdornment: formData.comissao && (
+                                        <InputAdornment position="end">
+                                            <IconButton onClick={() => handleClearField('comissao')} size="small">
+                                                <ClearIcon fontSize="small" />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="Email"
+                                name="email"
+                                value={formData.email}
+                                onChange={handleChange}
+                                type="email"
+                                InputProps={{
+                                    endAdornment: formData.email && (
+                                        <InputAdornment position="end">
+                                            <IconButton onClick={() => handleClearField('email')} size="small">
+                                                <ClearIcon fontSize="small" />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField
+                                fullWidth
+                                label="WhatsApp"
+                                name="whatsapp"
+                                value={formData.whatsapp}
+                                onChange={handleChange}
+                                // Adapte a máscara de telefone se necessário
+                                InputProps={{
+                                    endAdornment: formData.whatsapp && (
+                                        <InputAdornment position="end">
+                                            <IconButton onClick={() => handleClearField('whatsapp')} size="small">
+                                                <ClearIcon fontSize="small" />
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                }}
+                            />
+                        </Grid>
+                    </Grid>
+                    <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
                         <Button
                             type="submit"
                             variant="contained"
-                            color="primary"
-                            disabled={isSubmitting}
+                            startIcon={<SaveIcon />}
+                            disabled={isSaving}
                         >
-                            {isSubmitting ? <MuiCircularProgress size={24} /> : (isEditMode ? 'Salvar Alterações' : 'Cadastrar')}
-                        </Button>
-                        <Button
-                            variant="outlined"
-                            onClick={() => router.push('/cobradores')}
-                            disabled={isSubmitting}
-                        >
-                            Cancelar
+                            {isSaving ? <MuiCircularProgress size={24} /> : 'Salvar'}
                         </Button>
                     </Box>
                 </form>
