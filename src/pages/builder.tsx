@@ -120,9 +120,7 @@ interface LayoutApiData {
 interface PrintTestApiResponse {
     success: boolean;
     errorMessage: string | null;
-    data: {
-        link: string;
-    } | null; // `data` pode ser null se `success` for false
+    data: string | null; // <--- CORREÇÃO AQUI: 'data' é uma string ou null
 }
 
 
@@ -343,8 +341,8 @@ const Builder: React.FC = () => {
             if (result.success) {
                 if (endpointSuffix === 'gerararquivotesteimpressao') {
                     // --- Lógica ATUALIZADA para 'gerararquivotesteimpressao' ---
-                    if (result.data && result.data.link) {
-                        setTestPdfLink(result.data.link); // Armazena o link no estado
+                    if (result.data && result.data) {
+                        setTestPdfLink(result.data); // Armazena o link no estado
                         enqueueSnackbar('Link para o arquivo de teste de impressão gerado. Clique no link abaixo para baixar.', { variant: 'success' });
                         setCodigo('');
                     } else {

@@ -1,6 +1,6 @@
 // src/pages/vendedores/index.tsx
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'; // Importar useRef
 import Layout from '../../components/layout/Layout';
 import {
     Box,
@@ -29,6 +29,7 @@ import {
     Select,
     MenuItem,
     TableSortLabel,
+    Grid,
 } from '@mui/material';
 import { useTheme } from '@mui/material';
 import { visuallyHidden } from '@mui/utils';
@@ -36,8 +37,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import FilterAltOffIcon from '@mui/icons-material/FilterAltOff';
+import SearchIcon from '@mui/icons-material/Search';
 import { useRouter } from 'next/router';
 import { useSnackbar } from 'notistack';
 import { useAuth } from '../../context/AuthContext';
@@ -96,6 +96,17 @@ const VendedoresList: React.FC = () => {
         cobradorId: ''
     });
 
+    // useRef para manter a referência mais recente dos filtros
+    const filtersRef = useRef(filters);
+    // useEffect para manter filtersRef.current atualizado sempre que filters mudar
+    useEffect(() => {
+        filtersRef.current = filters;
+    }, [filters]);
+
+    // Novo estado para forçar a busca explicitamente
+    const [forceFetchTimestamp, setForceFetchTimestamp] = useState(0);
+
+
     const [cobradoresParaFiltro, setCobradoresParaFiltro] = useState<CobradorLookup[]>([]);
     const [isCobradoresLoading, setIsCobradoresLoading] = useState(true);
 
@@ -119,20 +130,19 @@ const VendedoresList: React.FC = () => {
 
         setIsLoading(true);
         try {
-            // Construção dinâmica dos parâmetros de filtro
+            // Usa o filtersRef.current para obter o estado mais recente dos filtros
+            const currentFilters = filtersRef.current;
+            
             const params: { [key: string]: string } = {
                 token: user.token,
                 page: page.toString(),
                 size: rowsPerPage.toString(),
-                // Use 'sort' para o campo de ordenação, como esperado pelo Spring Data JPA
-                orderBy: orderBy,
-                order:order,
+                orderBy:orderBy,
+                order: order
             };
 
-            // Adiciona filtros apenas se tiverem um valor significativo
-            for (const key in filters) {
-                const value = filters[key as keyof typeof filters];
-                // Se o valor não é vazio (para texto/número) e não é 'all' para o ativo
+            for (const key in currentFilters) {
+                const value = currentFilters[key as keyof typeof currentFilters];
                 if (value !== '' && (key !== 'ativo' || (key === 'ativo' && value !== 'all'))) {
                     params[key] = value;
                 }
@@ -172,7 +182,7 @@ const VendedoresList: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [page, rowsPerPage, orderBy, order, filters, user?.token, enqueueSnackbar]);
+    }, [page, rowsPerPage, orderBy, order, user?.token, enqueueSnackbar]); // REMOVIDO: filters das dependências
 
     const fetchCobradoresParaFiltro = useCallback(async () => {
         if (!user?.token) {
@@ -206,9 +216,11 @@ const VendedoresList: React.FC = () => {
         }
     }, [user?.token, enqueueSnackbar]);
 
+    // O useEffect agora depende de forceFetchTimestamp para disparar a busca por filtros
+    // e de fetchVendedores (que muda quando page, rowsPerPage, orderBy, order mudam)
     useEffect(() => {
         fetchVendedores();
-    }, [fetchVendedores]);
+    }, [fetchVendedores, forceFetchTimestamp]);
 
     useEffect(() => {
         fetchCobradoresParaFiltro();
@@ -219,6 +231,7 @@ const VendedoresList: React.FC = () => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
         setOrderBy(property);
+        setPage(0); // Reset page on sort
     };
 
     const handleChangePage = (event: unknown, newPage: number) => {
@@ -230,34 +243,42 @@ const VendedoresList: React.FC = () => {
         setPage(0);
     };
 
+    // Este handler SÓ atualiza o estado dos filtros, sem disparar a busca
     const handleFilterChange = (event: React.ChangeEvent<HTMLInputElement> | { target: { name?: string; value: unknown } }) => {
         const { name, value } = event.target;
         setFilters(prev => ({
             ...prev,
             [name as string]: value,
         }));
-        setPage(0);
     };
 
+    // Handler para o botão "Pesquisar" - dispara a busca
+    const handleSearch = () => {
+        setPage(0); // Garante que a pesquisa sempre começa da primeira página
+        setForceFetchTimestamp(Date.now()); // Força o useEffect a rodar
+    };
+
+    // Handler para limpar um filtro individual - NÃO dispara a busca
     const handleClearFilter = (filterName: keyof typeof filters) => {
         setFilters(prev => ({
             ...prev,
             [filterName]: '',
         }));
-        setPage(0);
     };
 
+    // Handler para limpar todos os filtros - dispara a busca
       const handleClearAllFilters = () => {
         setFilters({
             nome: '',
             login: '',
-            ativo: '', // Mantenha como string vazia para indicar "Todos"
+            ativo: '',
             comissao: '',
             email: '',
             whatsapp: '',
             cobradorId:'',
         });
-        setPage(0);
+        setPage(0); // A mudança de página disparará o fetchVendedores
+        setForceFetchTimestamp(Date.now()); // Força o useEffect a rodar
     };
 
     const handleAddVendedor = () => {
@@ -292,7 +313,7 @@ const VendedoresList: React.FC = () => {
 
             if (result.success) {
                 enqueueSnackbar('Vendedor excluído com sucesso!', { variant: 'success' });
-                fetchVendedores();
+                setForceFetchTimestamp(Date.now()); // Força o useEffect a rodar após a exclusão
                 handleCloseDeleteConfirm();
             } else {
                 enqueueSnackbar(result.errorMessage || 'Erro ao excluir vendedor.', { variant: 'error' });
@@ -330,14 +351,6 @@ const VendedoresList: React.FC = () => {
                     }}
                 >
                     <Button
-                        variant="outlined"
-                        startIcon={<ClearIcon />}
-                        onClick={handleClearAllFilters}
-                        sx={{ mr: 2 }}
-                    >
-                        Limpar Filtros
-                    </Button>
-                    <Button
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={handleAddVendedor}
@@ -346,6 +359,108 @@ const VendedoresList: React.FC = () => {
                     </Button>
                 </Box>
             </Box>
+
+            {/* Novo formulário de filtros */}
+            <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>Filtrar Vendedores</Typography>
+                <Grid container spacing={2}>
+                    {headCells.filter(cell => cell.filterable).map((headCell) => (
+                        <Grid item xs={12} sm={6} md={3} key={`filter-form-${headCell.id}`}>
+                            {headCell.filterType === 'text' && (
+                                <TextField
+                                    fullWidth
+                                    label={headCell.label}
+                                    name={headCell.id as string}
+                                    value={filters[headCell.id as keyof typeof filters]}
+                                    onChange={handleFilterChange}
+                                    InputProps={{
+                                        endAdornment: filters[headCell.id as keyof typeof filters] && (
+                                            <InputAdornment position="end">
+                                                <IconButton onClick={() => handleClearFilter(headCell.id as keyof typeof filters)} size="small">
+                                                    <ClearIcon fontSize="small" />
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            )}
+                            {headCell.filterType === 'boolean' && (
+                                <FormControl fullWidth>
+                                    <InputLabel>{headCell.label}</InputLabel>
+                                    <Select
+                                        name={headCell.id as string}
+                                        value={filters[headCell.id as keyof typeof filters]}
+                                        onChange={handleFilterChange}
+                                        label={headCell.label}
+                                    >
+                                        <MenuItem value="">
+                                            <em>Todos</em>
+                                        </MenuItem>
+                                        <MenuItem value="true">Ativo</MenuItem>
+                                        <MenuItem value="false">Inativo</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            )}
+                            {headCell.filterType === 'number' && (
+                                <TextField
+                                    fullWidth
+                                    label={headCell.label}
+                                    name={headCell.id as string}
+                                    value={filters[headCell.id as keyof typeof filters]}
+                                    onChange={handleFilterChange}
+                                    type="number"
+                                    InputProps={{
+                                        endAdornment: filters[headCell.id as keyof typeof filters] && (
+                                            <InputAdornment position="end">
+                                                <IconButton onClick={() => handleClearFilter(headCell.id as keyof typeof filters)} size="small">
+                                                    <ClearIcon fontSize="small" />
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            )}
+                            {headCell.filterType === 'select' && headCell.id === 'cobradorNome' && (
+                                <FormControl fullWidth>
+                                    <InputLabel>Cobrador</InputLabel>
+                                    <Select
+                                        name="cobradorId"
+                                        value={filters.cobradorId}
+                                        onChange={handleFilterChange}
+                                        label="Cobrador"
+                                        disabled={isCobradoresLoading}
+                                    >
+                                        <MenuItem value="">
+                                            <em>Todos</em>
+                                        </MenuItem>
+                                        {cobradoresParaFiltro.map((cobrador) => (
+                                            <MenuItem key={cobrador.id} value={cobrador.id}>
+                                                {cobrador.label}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            )}
+                        </Grid>
+                    ))}
+                </Grid>
+                <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                    <Button
+                        variant="contained"
+                        startIcon={<SearchIcon />}
+                        onClick={handleSearch}
+                    >
+                        Pesquisar
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        startIcon={<ClearIcon />}
+                        onClick={handleClearAllFilters}
+                    >
+                        Limpar Todos os Filtros
+                    </Button>
+                </Box>
+            </Paper>
 
             {(isLoading || isCobradoresLoading) && vendedores.length === 0 ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -373,8 +488,6 @@ const VendedoresList: React.FC = () => {
                                                         display: 'none',
                                                     },
                                                 } : {}),
-                                                
-                                                
                                             }}
                                         >
                                             {headCell.sortable ? (
@@ -401,109 +514,6 @@ const VendedoresList: React.FC = () => {
                                         </TableCell>
                                     ))}
                                 </TableRow>
-                               
-                                    <TableRow sx={{ backgroundColor: theme.palette.grey[100] }}>
-                                        {headCells.map((headCell) => (
-                                            <TableCell
-                                                key={`filter-${headCell.id}`}
-                                                sx={{
-                                                     [theme.breakpoints.down('sm')]: {
-                                                        fontSize: '1.1rem',
-                                                    },
-                                                    ...(headCell.id === 'comissao' || headCell.id === 'email' || headCell.id === 'whatsapp' || headCell.id === 'cobradorNome' ? {
-                                                        [theme.breakpoints.down('sm')]: {
-                                                            display: 'none',
-                                                        },
-                                                    } : {}),
-                                                }}
-                                            >
-                                                {headCell.filterable && (
-                                                    <>
-                                                        {headCell.filterType === 'text' && (
-                                                            <TextField
-                                                                fullWidth
-                                                                variant="standard"
-                                                                placeholder={`Filtrar ${headCell.label}`}
-                                                                name={headCell.id as string}
-                                                                value={filters[headCell.id as keyof typeof filters]}
-                                                                onChange={handleFilterChange}
-                                                                InputProps={{
-                                                                    endAdornment: filters[headCell.id as keyof typeof filters] && (
-                                                                        <InputAdornment position="end">
-                                                                            <IconButton onClick={() => handleClearFilter(headCell.id as keyof typeof filters)} size="small">
-                                                                                <ClearIcon fontSize="small" />
-                                                                            </IconButton>
-                                                                        </InputAdornment>
-                                                                    ),
-                                                                }}
-                                                                sx={{ mb: 1 }}
-                                                            />
-                                                        )}
-                                                        {headCell.filterType === 'boolean' && (
-                                                            <FormControl fullWidth variant="standard" sx={{ mb: 1 }}>
-                                                                <InputLabel>Status</InputLabel>
-                                                                <Select
-                                                                    name={headCell.id as string}
-                                                                    value={filters[headCell.id as keyof typeof filters]}
-                                                                    onChange={handleFilterChange}
-                                                                    label="Status"
-                                                                >
-                                                                    <MenuItem value="">
-                                                                        <em>Todos</em>
-                                                                    </MenuItem>
-                                                                    <MenuItem value="true">Ativo</MenuItem>
-                                                                    <MenuItem value="false">Inativo</MenuItem>
-                                                                </Select>
-                                                            </FormControl>
-                                                        )}
-                                                        {headCell.filterType === 'number' && (
-                                                            <TextField
-                                                                fullWidth
-                                                                variant="standard"
-                                                                placeholder={`Filtrar ${headCell.label}`}
-                                                                name={headCell.id as string}
-                                                                value={filters[headCell.id as keyof typeof filters]}
-                                                                onChange={handleFilterChange}
-                                                                type="number"
-                                                                InputProps={{
-                                                                    endAdornment: filters[headCell.id as keyof typeof filters] && (
-                                                                        <InputAdornment position="end">
-                                                                            <IconButton onClick={() => handleClearFilter(headCell.id as keyof typeof filters)} size="small">
-                                                                                <ClearIcon fontSize="small" />
-                                                                            </IconButton>
-                                                                        </InputAdornment>
-                                                                    ),
-                                                                }}
-                                                                sx={{ mb: 1 }}
-                                                            />
-                                                        )}
-                                                        {headCell.filterType === 'select' && headCell.id === 'cobradorNome' && (
-                                                            <FormControl fullWidth variant="standard" sx={{ mb: 1 }}>
-                                                                <InputLabel>Cobrador</InputLabel>
-                                                                <Select
-                                                                    name="cobradorId"
-                                                                    value={filters.cobradorId}
-                                                                    onChange={handleFilterChange}
-                                                                    label="Cobrador"
-                                                                    disabled={isCobradoresLoading}
-                                                                >
-                                                                    <MenuItem value="">
-                                                                        <em>Todos</em>
-                                                                    </MenuItem>
-                                                                    {cobradoresParaFiltro.map((cobrador) => (
-                                                                        <MenuItem key={cobrador.id} value={cobrador.id}>
-                                                                            {cobrador.label}
-                                                                        </MenuItem>
-                                                                    ))}
-                                                                </Select>
-                                                            </FormControl>
-                                                        )}
-                                                        {headCell.id === 'actions' && <Box sx={{ minWidth: '40px' }}></Box>}
-                                                    </>
-                                                )}
-                                            </TableCell>
-                                        ))}
-                                    </TableRow>
                             </TableHead>
                             <TableBody>
                                 {vendedores.length === 0 && !isLoading ? (
@@ -562,14 +572,6 @@ const VendedoresList: React.FC = () => {
                                                 }}
                                             >
                                                 {vendedor.whatsapp || ''}
-                                            </TableCell>
-                                            <TableCell
-                                                sx={{
-                                                    [theme.breakpoints.down('sm')]: { display: 'none' },
-                                                    fontSize: '0.85rem'
-                                                }}
-                                            >
-                                                {vendedor.cobradorNome || ''}
                                             </TableCell>
                                             <TableCell
                                                 align="right"
